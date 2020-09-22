@@ -1,3 +1,29 @@
 ﻿@page "/"
+@using System.Text
+@using Blazor.FileReader.Wasm.Demo.Shared
+<h1>Hello, world!</h1>
 
-<IndexCommon BufferSize="81920"/>
+Welcome to your new app.
+
+<div class="container">
+    <div class="row mb-2">
+        <div class="col">
+            <DataInputFileForm @ref="_dataInputFileForm"
+                               FileContent="_fileContent"
+                               SiteID="_id"
+                               OnUseLogs="SaveData" />
+
+        </div>
+    </div>
+</div>
+
+@code {
+    private int _id;
+    private string _status = "";
+    private DataInputFileForm _dataInputFileForm;
+
+    private void SaveData()
+    {
+        //...
+    }
+}"/>

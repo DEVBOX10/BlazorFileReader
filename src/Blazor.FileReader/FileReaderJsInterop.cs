@@ -1,7 +1,9 @@
 ﻿using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -127,29 +129,81 @@ namespace Tewr.Blazor.FileReader
 
         }
 
+        static bool isRetry = false;
         private async Task<int> ReadFileUnmarshalledAsync(
             int fileRef, byte[] buffer, long position, long bufferOffset, int count,
             CancellationToken cancellationToken)
         {
             var taskCompletionSource = new TaskCompletionSource<int>();
-            var id = ++_readFileUnmarshalledCallIdSource;
-            _readFileUnmarshalledCalls[id] = taskCompletionSource;
+            var taskId = ++_readFileUnmarshalledCallIdSource;
+            _readFileUnmarshalledCalls[taskId] = taskCompletionSource;
             cancellationToken.Register(() => taskCompletionSource.TrySetCanceled());
 
+            // Temporary buffer as whatever will be shared with js
+            // might be corrupted under gc pressure
+            var pool = ArrayPool<byte>.Shared;
+            var tempBuffer = pool.Rent(buffer.Length);
+            for (int i = 0; i < buffer.Length; i++)
+            {
+                tempBuffer[i] = 0;
+            }
+            tempBuffer[0] = (byte)(taskId%255);
             ((IJSUnmarshalledRuntime) CurrentJSRuntime)
                 .InvokeUnmarshalled<ReadFileParams, int>(
                 $"FileReaderComponent.ReadFileUnmarshalledAsync",
                 new ReadFileParams { 
-                    Buffer = buffer, 
+                    Buffer = tempBuffer, 
                     BufferOffset = bufferOffset, 
                     Count = count, 
                     FileRef = fileRef,
                     Position = position,
-                    TaskId = id
+                    TaskId = taskId
                 });
-
+            
             var bytesRead = await taskCompletionSource.Task;
+
+            var tempBuffer2 = pool.Rent(buffer.Length);
+            var testCall = await ReadFileMarshalledAsync(fileRef, tempBuffer2, position, bufferOffset, count, cancellationToken);
+            var testEqual = ByteArrayCompare(tempBuffer, tempBuffer2);
+            if (!testEqual)
+            {
+                Console.Error.WriteLine($"******** Broken! Params was " +
+                    $"{nameof(bufferOffset)} {bufferOffset} {nameof(count)} {count} {nameof(fileRef)} {fileRef} " +
+                    $"{nameof(position)} {position} {nameof(taskId)} {taskId}");
+
+                Console.Error.WriteLine($"******** unmanaged {string.Join(" ", tempBuffer)}");
+                Console.Error.WriteLine($"********   managed {string.Join(" ", tempBuffer2)}");
+
+                // Can I try again and succeed??
+                if (!isRetry == true)
+                {
+                    isRetry = true;
+                    return await ReadFileUnmarshalledAsync(fileRef, buffer, position, bufferOffset, count, cancellationToken);
+                }
+                throw new InvalidOperationException("Call was broken");
+            }
+
+
+            Array.Copy(tempBuffer, bufferOffset, buffer, bufferOffset, bytesRead);
+            pool.Return(tempBuffer);
+            pool.Return(tempBuffer2);
+            if (isRetry)
+            {
+                throw new InvalidOperationException("Call was broken, but was correct after retrying!!");
+            }
             return bytesRead;
+        }
+
+        static bool ByteArrayCompare(byte[] a1, byte[] a2)
+        {
+            if (a1.Length != a2.Length)
+                return false;
+
+            for (int i = 0; i < a1.Length; i++)
+                if (a1[i] != a2[i])
+                    return false;
+
+            return true;
         }
 
         [JSInvokable(nameof(EndReadFileUnmarshalledAsyncResult))]

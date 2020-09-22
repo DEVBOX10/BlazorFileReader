@@ -104,7 +104,17 @@ var FileReaderComponent = (function () {
                     try {
                         var dotNetBufferView = Blazor.platform.toUint8Array(readFileParams.buffer);
                         var arrayBuffer = r.result;
+                        var isZero = dotNetBufferView.every(function (v, i, a) { return (i === 0 || a[i] === 0); });
+                        if (!isZero || dotNetBufferView[0] !== (readFileParams.taskId % 255)) {
+                            console.debug("Buffer had unexpected content", readFileParams, dotNetBufferView);
+                        }
+                        if (readFileParams.taskId > 323) {
+                            console.debug("Params output", readFileParams, dotNetBufferView);
+                        }
                         dotNetBufferView.set(new Uint8Array(arrayBuffer), readFileParams.bufferOffset);
+                        if (readFileParams.taskId > 323) {
+                            console.debug("Params output after set call", readFileParams, dotNetBufferView);
+                        }
                         var byteCount = Math.min(arrayBuffer.byteLength, readFileParams.count);
                         resolve(byteCount);
                     }

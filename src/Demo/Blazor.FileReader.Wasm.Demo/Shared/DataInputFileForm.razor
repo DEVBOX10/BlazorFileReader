@@ -1,0 +1,36 @@
+﻿@using Tewr.Blazor.FileReader;
+@inject Tewr.Blazor.FileReader.IFileReaderService fileReaderService
+<div class="container">
+    <div class="row mb-2">
+        <div class="col">
+
+            <div class="input-group">
+                <div class="custom-file">
+                    <input type="file" class="custom-file-input" id="jsonInputFilename" @ref="InputElement" @onchange="FilesSelected" accept=".json" />
+                    <label class="custom-file-label" for="jsonInputFilename">@Label</label>
+                </div>
+                <div class="input-group-append">
+                    <button class="btn btn-outline-secondary" type="button" @onclick="OnConvertData">Convert text</button>
+                    <button class="btn btn-outline-secondary" type="button" @onclick="OnUseLogs">Use logs</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    @if (LoadedData != null)
+    {
+        <div class="row mb-2">
+            <div class="col">
+                <div class="text-info">Number of logs loaded: @LoadedData.Count</div>
+            </div>
+        </div>
+    }
+    <div class="row">
+        <div class="col">
+            <div class="alert alert-info">
+                <textarea class="form-control" readonly>@_status</textarea>
+            </div>
+        </div>
+    </div>
+</div>
+
+
